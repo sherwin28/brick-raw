@@ -1,0 +1,9 @@
+{
+    "modules":{
+        "plugin":{
+            "command":"net.isger.brick.plugin.PluginCmd",
+            "loader":"net.isger.brick.plugin.PluginLoader",
+            "gate":"net.isger.brick.plugin.PluginGate"
+        }
+    }
+}

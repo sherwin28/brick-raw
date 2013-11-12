@@ -5,15 +5,15 @@ import java.io.InputStream;
 import java.net.URL;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Hashtable;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
 import net.isger.brick.util.Files;
 import net.isger.brick.util.Formats;
-import net.isger.brick.util.Hitchers;
+import net.isger.brick.util.hitcher.Director;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  * @author issing
  * 
  */
-public class Depository {
+public class Depository extends Director {
 
     private static final Logger LOG;
 
@@ -32,98 +32,45 @@ public class Depository {
 
     private static final Depository DEPOS = new Depository();
 
-    /** 仓库包属性名 */
-    private static final String PROP_DEPOTS = "brick.raw.depots";
+    /** 分隔标记 */
+    private static final String TOKEN_SEPARETOR = ":";
+
+    /** 仓库包属性键 */
+    private static final String KEY_DEPOTS = "brick.raw.depots";
 
     /** 仓库默认路径 */
-    private static final String HITCH_PATH = "net/isger/brick/raw/depot";
+    private static final String DEPOT_PATH = "net/isger/brick/raw/depot";
 
-    /** 仓库分隔标记 */
-    private static final String TOKEN_DEPOT = ":";
+    /** 仓库配置文件 */
+    private static final String DEPOTS_PROPS = "depots.properties";
 
-    /** 仓库包配置 */
-    private static final String DEPOTS_IRC = "depots.irc";
-
-    private static final int UNINITIALIZED = 0;
-
-    private static final int INITIALIZING = 1;
-
-    private static final int INITSUCCESS = 2;
-
-    // private static final int INITFAILURE = 3;
-
-    /** 初始化状态 */
-    private int initial;
+    /** 仓库类配置 */
+    private static final String PROP_DEPOT_CLASSES = "depot.classes";
 
     /** 可写仓库集合 */
-    private Hashtable<String, Depot> writeDepots;
+    private Hashtable<Class<?>, Depot> writeDepots;
 
     /** 可读仓库集合 */
-    private Hashtable<String, Depot> readDepots;
+    private Hashtable<Class<?>, Depot> readDepots;
 
     static {
         LOG = LoggerFactory.getLogger(Depository.class);
     }
 
     private Depository() {
-        initial = UNINITIALIZED;
-        writeDepots = new Hashtable<String, Depot>();
-        readDepots = new Hashtable<String, Depot>();
-        initial();
+        writeDepots = new Hashtable<Class<?>, Depot>();
+        readDepots = new Hashtable<Class<?>, Depot>();
     }
 
-    /**
-     * 初始化保管仓
-     * 
-     */
-    @SuppressWarnings("unchecked")
-    private void initial() {
-        synchronized (LOCKED) {
-            if (DEPOS.initial == UNINITIALIZED) {
-                DEPOS.initial = INITIALIZING;
-            } else {
-                LOG.warn("Exists the initialize thread.");
-                return;
-            }
-        }
-        StringTokenizer depots = getDepotTokenizer();
-        while (depots.hasMoreElements()) {
-            loadDepots(depots.nextElement().toString());
-        }
-        readDepots = (Hashtable<String, Depot>) writeDepots.clone();
-        DEPOS.initial = INITSUCCESS;
+    protected String directHitchPath() {
+        return directHitchPath(KEY_DEPOTS, DEPOT_PATH);
     }
 
-    /**
-     * 获取仓库包
-     * 
-     * @return
-     */
-    private static StringTokenizer getDepotTokenizer() {
-        // 提取仓库路径
-        String depots = AccessController
-                .doPrivileged(new PrivilegedAction<String>() {
-                    public String run() {
-                        return System.getProperty(PROP_DEPOTS, HITCH_PATH);
-                    }
-                });
-        if (depots.indexOf(HITCH_PATH) == -1) {
-            depots += TOKEN_DEPOT + HITCH_PATH;
-        }
-        return new StringTokenizer(depots, TOKEN_DEPOT);
-    }
-
-    /**
-     * 加载仓库（根据配置路径）
-     * 
-     * @param path
-     */
-    private static void loadDepots(String path) {
-        Hitchers.getHitcher(path).hitch();
+    protected void directAttach(String path) {
         ClassLoader loader = Depository.class.getClassLoader();
         Enumeration<URL> urlEnum;
         try {
-            path = Formats.toPath(path, DEPOTS_IRC);
+            path = Formats.toPath(path, DEPOTS_PROPS);
             if (loader == null) {
                 urlEnum = ClassLoader.getSystemResources(path);
             } else {
@@ -137,28 +84,33 @@ public class Depository {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    protected void directSanity() {
+        readDepots = (Hashtable<Class<?>, Depot>) writeDepots.clone();
+        // 挂载默认资源
+        mount();
+    }
+
     /**
      * 加载仓库（根据资源配置文件）
      * 
      * @param url
      */
-    private static void loadDepots(URL url) {
+    private void loadDepots(URL url) {
         // 注册配置仓库
         Depot depot = null;
-        String name = null;
         Properties props = loadProps(url);
-        for (Entry<Object, Object> prop : props.entrySet()) {
-            if (DEPOS.writeDepots.get(name = (String) prop.getKey()) == null) {
-                try {
-                    depot = newDepot((String) prop.getValue());
-                    if (depot != null) {
-                        DEPOS.writeDepots.put(name, depot);
-                    }
-                } catch (Exception e) {
-                }
-            } else {
-                LOG.warn("Multiple [{}] loading.", name);
+        props.getProperty(PROP_DEPOT_CLASSES);
+        StringTokenizer depots = getDepots(props);
+        while (depots.hasMoreElements()) {
+            try {
+                depot = newDepot(depots.nextElement().toString());
+            } catch (Exception e) {
+                LOG.error("Failure to loading depot [{}].",
+                        depots.nextElement(), e);
+                continue;
             }
+            addDepot(depot);
         }
     }
 
@@ -168,7 +120,7 @@ public class Depository {
      * @param url
      * @return
      */
-    private static Properties loadProps(URL url) {
+    private Properties loadProps(URL url) {
         Properties props = new Properties();
         InputStream is = null;
         try {
@@ -182,13 +134,24 @@ public class Depository {
     }
 
     /**
+     * 获取指定配置仓库
+     * 
+     * @param props
+     * @return
+     */
+    private StringTokenizer getDepots(Properties props) {
+        return new StringTokenizer(props.getProperty(PROP_DEPOT_CLASSES, ""),
+                TOKEN_SEPARETOR);
+    }
+
+    /**
      * 创建仓库
      * 
      * @param name
      * @return
      * @throws Exception
      */
-    private static Depot newDepot(String name) throws Exception {
+    private Depot newDepot(String name) throws Exception {
         Class<?> clazz = null;
         try {
             clazz = Class.forName(name);
@@ -205,17 +168,59 @@ public class Depository {
         return depot;
     }
 
+    private void addDepot(Depot depot) {
+        Class<?> clazz = depot.getClass();
+        Depot oldDepot = writeDepots.put(clazz, depot);
+        if (oldDepot != null) {
+            LOG.warn("Multiple Binding depot {}", clazz);
+        } else {
+            LOG.info("Binding depot {}", depot);
+        }
+    }
+
     /**
-     * 获取所有仓库
+     * 挂载默认资源
+     * 
+     */
+    private void mount() {
+        mount("./");
+        StringTokenizer classPaths = new StringTokenizer(
+                AccessController.doPrivileged(new PrivilegedAction<String>() {
+                    public String run() {
+                        return System.getProperty("java.class.path", "");
+                    }
+                }),
+                AccessController.doPrivileged(new PrivilegedAction<String>() {
+                    public String run() {
+                        return System.getProperty("path.separator",
+                                TOKEN_SEPARETOR);
+                    }
+                }));
+        while (classPaths.hasMoreElements()) {
+            mount(classPaths.nextElement().toString());
+        }
+    }
+
+    /**
+     * 挂载默认资源
+     * 
+     * @param url
+     */
+    private void mount(String url) {
+        for (Depot depot : readDepots.values()) {
+            if (depot.isSupport(Depot.LAB_CLASSPATH)) {
+                depot.mount(url);
+            }
+        }
+    }
+
+    /**
+     * 获取资源保管仓
      * 
      * @return
      */
-    private static Hashtable<String, Depot> getDepots() {
-        Hashtable<String, Depot> depots = null;
-        synchronized (LOCKED) {
-            depots = DEPOS.readDepots;
-        }
-        return depots;
+    public static Depository getDepository() {
+        return canonicalize(DEPOS);
     }
 
     /**
@@ -226,20 +231,9 @@ public class Depository {
      * @return
      */
     @SuppressWarnings("unchecked")
-    public static Depot addDepot(String name, Depot depot) {
-        depot = DEPOS.writeDepots.put(name, depot);
-        DEPOS.readDepots = (Hashtable<String, Depot>) DEPOS.writeDepots.clone();
-        return depot;
-    }
-
-    /**
-     * 获取指定仓库
-     * 
-     * @param name
-     * @return
-     */
-    public static Depot getDepot(String name) {
-        return getDepots().get(name);
+    public void add(Depot depot) {
+        addDepot(depot);
+        readDepots = (Hashtable<Class<?>, Depot>) writeDepots.clone();
     }
 
     /**
@@ -247,43 +241,106 @@ public class Depository {
      * 
      * @param path
      */
-    public static void mount(String path) {
-        for (Depot depot : getDepots().values()) {
-            depot.mount(path);
+    public static void mount(String label, String path) {
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(label)) {
+                depot.mount(path);
+            }
         }
     }
 
     /**
-     * 寻获种子
+     * 寻觅种子
      * 
-     * @param depotName
-     * @param seedName
+     * @param label
+     * @param info
      * @return
      */
-    public static Seed seek(String depotName, String seedName) {
-        return getDepot(depotName).seek(seedName);
+    public static Seed seek(String label, String info) {
+        Seed seed = null;
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(label)) {
+                if ((seed = depot.seek(info)) != null) {
+                    break;
+                }
+            }
+        }
+        return seed;
     }
 
     /**
      * 包装种子
      * 
-     * @param depotName
-     * @param seedName
+     * @param label
+     * @param info
      * @return
      */
-    public static Artifact wrap(String depotName, String seedName) {
-        return getDepot(depotName).wrap(seedName);
+    public static Artifact wrap(String label, String info) {
+        Artifact artifact = null;
+        Seed seed = null;
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(label)) {
+                seed = depot.seek(info);
+                if (seed == null) {
+                    continue;
+                }
+                artifact = depot.wrap(seed);
+                if (artifact == null) {
+                    artifact = wrap(label, seed);
+                    if (artifact != null) {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        return artifact;
     }
 
     /**
      * 包装种子
      * 
-     * @param depotName
+     * @param wrapLabel
+     * @param seekLabel
+     * @param info
+     * @return
+     */
+    public static Artifact wrap(String wrapLabel, String seekLabel, String info) {
+        Artifact artifact = null;
+        Seed seed = null;
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(seekLabel)) {
+                seed = depot.seek(info);
+                if (seed == null) {
+                    continue;
+                }
+                artifact = wrap(wrapLabel, seed);
+                if (artifact != null) {
+                    break;
+                }
+            }
+        }
+        return artifact;
+    }
+
+    /**
+     * 包装种子
+     * 
+     * @param label
      * @param seed
      * @return
      */
-    public static Artifact wrap(String depotName, Seed seed) {
-        return getDepot(depotName).wrap(seed);
+    public static Artifact wrap(String label, Seed seed) {
+        Artifact artifact = null;
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(label)) {
+                if ((artifact = depot.wrap(seed)) != null) {
+                    break;
+                }
+            }
+        }
+        return artifact;
     }
 
     /**
@@ -291,10 +348,25 @@ public class Depository {
      * 
      * @param path
      */
-    public static void unmount(String path) {
-        for (Depot depot : getDepots().values()) {
-            depot.unmount(path);
+    public static void unmount(String label, String path) {
+        for (Depot depot : getDepots()) {
+            if (depot.isSupport(label)) {
+                depot.unmount(path);
+            }
         }
+    }
+
+    /**
+     * 获取所有仓库
+     * 
+     * @return
+     */
+    private static Collection<Depot> getDepots() {
+        Collection<Depot> depots = null;
+        synchronized (LOCKED) {
+            depots = getDepository().readDepots.values();
+        }
+        return depots;
     }
 
 }
