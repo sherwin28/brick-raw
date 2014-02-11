@@ -4,7 +4,7 @@
   <groupId>net.isger.brick</groupId>
   <artifactId>brick-raw</artifactId>
   <packaging>jar</packaging>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.0.0-alpha</version>
   <name>brick-raw</name>
   <url>http://maven.apache.org</url>
   <properties>
@@ -35,7 +35,7 @@
     <dependency>
       <groupId>net.isger.brick</groupId>
       <artifactId>brick-util</artifactId>
-      <version>1.0-SNAPSHOT</version>
+      <version>1.0.0-alpha</version>
     </dependency>
   </dependencies>
 </project>

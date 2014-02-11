@@ -183,33 +183,68 @@ public class Depository extends Director {
      * 
      */
     private void mount() {
-        mount("./");
-        StringTokenizer classPaths = new StringTokenizer(
-                AccessController.doPrivileged(new PrivilegedAction<String>() {
-                    public String run() {
-                        return System.getProperty("java.class.path", "");
-                    }
-                }),
-                AccessController.doPrivileged(new PrivilegedAction<String>() {
-                    public String run() {
-                        return System.getProperty("path.separator",
-                                TOKEN_SEPARETOR);
-                    }
-                }));
-        while (classPaths.hasMoreElements()) {
-            mount(classPaths.nextElement().toString());
+        ClassLoader loader = this.getClass().getClassLoader();
+        if (loader == null) {
+            loader = ClassLoader.getSystemClassLoader();
+        }
+        URL url = loader.getResource("/");
+        try {
+            mount(url);
+        } catch (Exception e) {
+            mount("./");
+        }
+        final String separator = getSystemProperty("path.separator",
+                TOKEN_SEPARETOR);
+        StringTokenizer pathToken = new StringTokenizer(getSystemProperty(
+                "java.class.path", ""), separator);
+        mount(pathToken);
+        // pathToken = new StringTokenizer(getSystemProperty("java.lib.path",
+        // ""),
+        // separator);
+        // mount(pathToken);
+    }
+
+    private String getSystemProperty(final String key, final String def) {
+        return AccessController.doPrivileged(new PrivilegedAction<String>() {
+            public String run() {
+                return System.getProperty(key, def);
+            }
+        });
+    }
+
+    /**
+     * 挂载资源
+     * 
+     * @param pathToken
+     */
+    private void mount(StringTokenizer pathToken) {
+        while (pathToken.hasMoreElements()) {
+            mount(pathToken.nextElement().toString());
         }
     }
 
     /**
-     * 挂载默认资源
+     * 挂载资源
      * 
      * @param url
      */
-    private void mount(String url) {
+    private void mount(URL url) {
         for (Depot depot : readDepots.values()) {
             if (depot.isSupport(Depot.LAB_CLASSPATH)) {
                 depot.mount(url);
+            }
+        }
+    }
+
+    /**
+     * 挂载资源
+     * 
+     * @param path
+     */
+    private void mount(String path) {
+        for (Depot depot : readDepots.values()) {
+            if (depot.isSupport(Depot.LAB_CLASSPATH)) {
+                depot.mount(path);
             }
         }
     }

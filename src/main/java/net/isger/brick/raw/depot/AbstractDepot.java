@@ -26,10 +26,4 @@ public abstract class AbstractDepot implements Depot {
         return label != null && labs.contains(label.toLowerCase());
     }
 
-    public void mount(String path) {
-    }
-
-    public void unmount(String path) {
-    }
-
 }

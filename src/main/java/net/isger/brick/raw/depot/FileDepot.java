@@ -1,6 +1,7 @@
 package net.isger.brick.raw.depot;
 
 import java.io.File;
+import java.net.URL;
 import java.util.Vector;
 
 import net.isger.brick.raw.Artifact;
@@ -23,6 +24,10 @@ public class FileDepot extends AbstractDepot {
         paths = new Vector<File>();
         addLabel(LAB_CLASSPATH);
         addLabel(LAB_FILE);
+    }
+
+    public void mount(URL url) {
+        mount(url.getFile());
     }
 
     public void mount(String path) {
@@ -58,6 +63,9 @@ public class FileDepot extends AbstractDepot {
     }
 
     public void unmount(String path) {
+    }
+
+    public void unmount(URL url) {
     }
 
 }

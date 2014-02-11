@@ -2,6 +2,7 @@ package net.isger.brick.raw.depot;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.util.Vector;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
@@ -28,6 +29,10 @@ public class JarDepot extends AbstractDepot {
         addLabel(LAB_CLASSPATH);
         addLabel(LAB_JAR);
         addLabel(LAB_FILE);
+    }
+
+    public void mount(URL url) {
+        mount(url.getFile());
     }
 
     public void mount(String path) {
@@ -70,6 +75,9 @@ public class JarDepot extends AbstractDepot {
     }
 
     public void unmount(String path) {
+    }
+
+    public void unmount(URL url) {
     }
 
 }
